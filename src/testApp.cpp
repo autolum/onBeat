@@ -2,10 +2,10 @@
 
 void testApp::setup() {
 	ofSetVerticalSync(true);
-	
+	bcol=0;
 	plotHeight = 128;
 	bufferSize = 1024;
-    tBl = 200;
+    tBl = 60;
 	
 	//fft = ofxFft::create(bufferSize, OF_FFT_WINDOW_HAMMING);
 	// To use FFTW, try:
@@ -27,7 +27,8 @@ void testApp::setup() {
 	// [bins] samples per buffer
 	// 4 num buffers (latency)
 	
-	ofSoundStreamSetup(0, 1, this, 44100, bufferSize, 4);
+    ofSoundStreamSetup(0, 1, 44100, bufferSize, 4);
+    
 	
 	ofBackground(0, 0, 0);
 }
@@ -43,12 +44,18 @@ void testApp::draw() {
 	string msg = ofToString((int) ofGetFrameRate()) + " fps";
 	ofDrawBitmapString(msg, ofGetWidth() - 80, ofGetHeight() - 20);
     ofSetColor(255, 255, 255);
-    bargraph(tBuffer1,10.0, 32, 512, 800, 128);
-    bargraph(tBuffer2,50.0, 32, 256, 800, 128);
+//    bargraph(tBuffer1,10.0, 32, 512, 800, 128);
+//    bargraph(tBuffer2,50.0, 32, 256, 800, 128);
     ofSetColor(255, 255, 0);
     bargraph(tBuffer3,50.0, 32, 256, 800, 128);
     ofSetColor(255, 0, 0);
     bargraph(tBuffer4,50.0, 32, 256, 800, 128);
+    
+    if(isBeat) bcol=255;
+    ofSetColor(bcol);
+    ofFill();
+    ofRect(10, 400, 500, 100);
+    bcol = 0;
 }
 
 void testApp::update(){
@@ -57,34 +64,54 @@ void testApp::update(){
     float sdiff = 0.0;
     float diff = 0.0;
 
-    for (int i = 0; i < middleBins.size()/50; i++){
+    for (int i = 0; i < middleBins.size(); i++){
         nrg += middleBins[i];
         diff = drawBins[i]-middleBins[i];
         sdiff += (diff + abs(diff))*.5;
         //sdiff +=
     }
     
-    float summ = 0.0;
-    int i = 1;
-    list<float>::iterator it;
-    it   = tBuffer2.begin();
-    for (int i = 0; i < 20; i++){
-        summ += *it;
-        it++;
-    }
-    summ/=20;
-    
-    
-    //cout << ' ' << nrg;
     tBuffer1.push_front(nrg);
     tBuffer1.pop_back();
     tBuffer2.push_front(sdiff);
     tBuffer2.pop_back();
-    tBuffer3.push_front(summ*2);
-    tBuffer3.pop_back();
-    float sd =sdiff-(summ*2);
-    tBuffer4.push_front(sd+abs(sd));
-    tBuffer4.pop_back();
+    
+    //Mittelwert berechnen
+    float summ = 0.0;
+    list<float>::iterator it;
+    for (it = tBuffer2.begin(); it != tBuffer2.end(); ++it){
+        summ += *it;
+    }
+    
+    //Mittelwert auf Null setzten und Summe der Quadrate
+    summ/=tBl;
+    it   = tBuffer2.begin();
+    float sq = 0.0;
+    for (int i = 0; i < tBl; i++){
+        tBuffer3[i] = *it-summ;
+        it++;
+        sq += tBuffer3[i]*tBuffer3[i];
+    }
+    
+    //Varianz auf eins
+    for (int i = 0; i < tBl; i++){
+        tBuffer3[i] /=sqrt(sq);
+    }
+    
+    //Peak pick
+    int w = 3;
+    int m = 4;
+    float delta = 0.4;
+    isBeat = true;
+    summ = 0.0;
+    for (int i = -w; i < w*m; i++){
+        if (tBuffer3[w]<tBuffer3[w+i]) isBeat = false;
+        summ += tBuffer3[w+i];
+    }
+    summ /= (m*w+w+1);
+    if(tBuffer3[w] < summ+delta) isBeat = false;
+    
+    //cout << tBuffer3[w]-summ <<"\n";
     
     soundMutex.lock();
 	drawBins = middleBins;
@@ -108,7 +135,7 @@ void testApp::plot(vector<float>& buffer, float scale, float offset) {
 	glPopMatrix();
 }
 
-void testApp::bargraph(list<float> vl, float sca, int px, int py, int w, int h) {
+void testApp::bargraph(vector<float> vl, float sca, int px, int py, int w, int h) {
 
     ofNoFill();
     ofRect(px, py, w, h);
@@ -122,7 +149,7 @@ void testApp::bargraph(list<float> vl, float sca, int px, int py, int w, int h) 
 
     ofBeginShape();
     int i = 0;
-    for (list<float>::iterator it  = vl.begin(); it != vl.end(); ++it){
+    for (vector<float>::iterator it  = vl.begin(); it != vl.end(); ++it){
         //if(*iit) ofSetColor(255,0,0,100);
         //else ofSetColor(255,100);
         //ofRect(i*rw+px, py + h/2, 1, *it*10*sca);
@@ -158,11 +185,11 @@ void testApp::audioReceived(float* input, int bufferSize, int nChannels) {
 			maxValue = abs(audioBins[i]);
 		}
 	}
-
-	for(int i = 0; i < fft->getBinSize(); i++) {
-		audioBins[i] /= maxValue;
-	}
     */
+	for(int i = 0; i < fft->getBinSize(); i++) {
+		audioBins[i] /= sqrt(audioBins[i]);
+	}
+    
 	
 	soundMutex.lock();
 	middleBins = audioBins;

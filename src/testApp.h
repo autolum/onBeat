@@ -19,8 +19,12 @@ public:
 	
 	ofMutex soundMutex;
 	vector<float> drawBins, middleBins, audioBins;
-    list<float> tBuffer1, tBuffer2, tBuffer3, tBuffer4;
+    list<float> tBuffer1, tBuffer2;
+    vector<float> tBuffer3, tBuffer4;
     list<bool> tBeat;
     
-    void bargraph(list<float> vl, float sca, int px, int py, int w, int h);
+    bool isBeat;
+    float bcol;
+    
+    void bargraph(vector<float> vl, float sca, int px, int py, int w, int h);
 };
